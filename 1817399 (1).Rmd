@@ -1,0 +1,282 @@
+---
+title: "Determinant of subjective well-being"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE)
+library(tidyverse)
+library(haven)
+library(naniar)
+library(survey)
+library(glmnet)
+library(gganimate)
+library(tidyr)
+library(cowplot)
+#file can be download at "https://livewarwickac-my.sharepoint.com/:f:/g/personal/u1817399_live_warwick_ac_uk/EiJcnpITi-5LmTwUJ3XVXqAB7_xeSI4qyEXWwPS8w4ZaBw?e=KLYYNB" password: MSKOhusi89
+#dataset is in the zip folder
+indresp <- read_dta("j_indresp.dta") # loading our data
+
+```
+
+## u1817399
+## Introduction
+The study of subjective well-being is important, society with a high well-being drives economic productivity as individual that are more satisfied with current situations are more likely to perform well in jobs which in turns drives the economy. Understanding the determinants of subjective well-being proves critical amid of this global COVID-19 pandemic when real wage going into pre-recessions level when governments are putting in effort to lower rate of infections while protecting the economy. Therefore, with the knowledge of what affects subjective well-being and the magnitude of the effects of the factors affecting subjective well-being, allows the governments to better protect the well-being of the society which in turn for promote speedy and strong recovery of the economy. 
+
+Based on existing literature, level of health and social relationship are strong determinants for subjective well-being. As health enable the person to enjoy life without worrying about their illness, this will also apply to good mental health. Next, social relationship are strong support for high subjective well-being, as family member are able to help support each other during hard time. Furthermore, Gudmundsdottir (2013) argues that financial situations predict subjective well-being strongly, as individuals that are in a bad financial position are usually in a poor well-being. 
+
+Higher education individuals might have better opportunities for better compensations or more interesting jobs leading to a higher subjective well-being. In support of this statement, De Neve and Ward (2017) able to show that higher qualifications did have significant and beneficial effect of subjective well-being. Unemployment had constantly demonstrated lower subjective well-being for across the world (Gudmundsdottir 2013). When studying individuals in Great Britain which are unemployed around the 1990’s, they have significantly lower subjective well-being compared to individuals which are employed (Clark & Oswald 1994). Subjective well-being is usually increase as age increase (Argyle 2001). 
+
+With this in mind, we are motivated to examine the determinant of subjective well-being in current time. Based on existing literature we can identify factors affecting subjective well-being; therefore, we will examine the validity of various factors that mentioned. Among educations, financial situations, income and employment we are interested to find out the interactions among the following variables.However, fitting large variables into OLS might easily lead to a kitchen sink regression. To address the following problem, we included lasso and adaptive lasso for the analysis. Next, we will then evaluate the model with a test data set. 
+
+## Data & Methodology
+Using the United Kingdom household longitudinal study (UKHLS) a cross-sectional multi-purpose survey that gathers information's about individual’s varies socio-economic, demographic characteristics etc across the UK. Taking the latest complete dataset wave 10 of the UKHLS which conducted during 2018 till 2019. For our dependent variable we had taken “scghq1_dv” a variable measuring subjective well-being, “scghq1_dv” a scale from 0 –36 derived from asking respondents 12 questions from the General Health Questionnaire, 0 being the least distressed and 36 being the most distressed.  
+
+Next, to measure respondent’s total monthly income, we can gather respondent’s net labor income (after tax and insurance), miscellaneous income, private benefit income, investment income, pension income and social benefit income and sum it up to the variable “income” for our analysis. “j_finnow” measures respondent’s financial situation with 5 distinct categories ranging from best situations which is living comfortably, doing alright, just about getting by, finding it quite difficult to finding it very difficult, from our dataset most respondents are financially doing alright at 9691 
+
+Furthermore, by transforming the variable “j_ethn_dv” into ethnicity for our analysis which contains 6 different background which is Black, Arab, White, Mixed, Asian and Others ethnic background. To measure respondent’s marital status there are either in a partnership, separated/divorced, widowed or never married. Job status are employment, unemployed, retired or other.  “j_scsf1” measures respondent’s health status from Excellent, very good, good, fair and poor. 
+
+Focusing analysis on England and cleaning the dataset, there are 24149 observations, we then split 0.75 of the observations for model building and 0.25 for testing. First, we regress “scghq1_dv” against the variables in the dataset, interested to investigate the interactions between educations, financial situations, income, and employment we include the interactions between the variables. Next, we regress the dataset with lasso and adaptive lasso. 
+
+In terms of the scale of subjective well-being 6 has highest number of respondents (2823) followed by 12 about 2639 respondent. The mean is 11 showing that on average respondent less distressed. 
+
+
+```{r echo =FALSE}
+#Data preparations
+
+#Selecting variables that are needed for the analysis
+df <- select(indresp, j_single_dv, j_country, j_dvage, j_ethn_dv, j_sex, j_marstat_dv, j_jbstat, j_hiqual_dv, j_scsf1, j_sclfsat2, j_scghq1_dv, j_finnow, j_smoker, j_hhtype_dv, j_fimnprben_dv, j_fimnsben_dv, j_fimnpen_dv, j_fimnmisc_dv, j_fimnlabnet_dv, j_fimninvnet_dv)
+
+#Preliminary check of our selected dataset
+#df[1:10, ] #Listing the top 10 observations
+#dim(df) # Showing the dimensions of our dataset
+#names(df) #Checking the names of our variables 
+
+#Listing missing values, as under UKHLS dataset, they labels observations that are inapplicable or etc to -1, -2, -3, -7, -8 and -9. 
+missval <- c(-9, -8, -7, -2, -1)
+for (i in 1:5) {
+ df <- df %>%
+ mutate_all(., list(~na_if(., missval[i])))
+}
+
+df <- df %>%
+ replace_with_na(replace = list(j_dvage=c("16"))) #only interested is analysis above 16 
+
+
+df_1 <- na.omit(df) #omiting missing values for easier analysis
+#View(df_1) #View our selected dataset
+
+#Transform variables to factor and double
+df_cleaned <- df_1
+cat_var <- c("j_single_dv",
+ "j_country", "j_ethn_dv", "j_sex", "j_marstat_dv", "j_jbstat", "j_hiqual_dv", "j_finnow", "j_smoker", "j_hhtype_dv", "j_scsf1", "j_sclfsat2")
+cont_var <- c("j_dvage", "j_fimnprben_dv", "j_fimnsben_dv", "j_fimnpen_dv", "j_fimnmisc_dv", "j_fimnlabnet_dv", "j_fimninvnet_dv", "j_scghq1_dv")
+df_cleaned[ , cat_var] <- lapply(df_cleaned[ ,cat_var], as_factor)
+df_cleaned[ , cont_var] <- lapply(df_cleaned[ , cont_var], as.double)
+
+#combing some factor variables for better analysis
+df_cleaned <- df_cleaned %>%
+  mutate(
+    income = j_fimninvnet_dv + j_fimnlabnet_dv + j_fimnmisc_dv + j_fimnpen_dv + j_fimnsben_dv + j_fimnprben_dv,
+    sat_income = fct_collapse(j_sclfsat2, 
+                              Very_dissatisfied = c("Completely dissatisfied", "Mostly dissatisfied"),
+                              Somewhat_dissatisfied = c("Somewhat dissatisfied"),
+                              Neither_Sat_nor_Dissat = c("Neither Sat nor Dissat"),
+                              Somewhat_satisfied = "Somewhat satisfied",
+                              Very_dissatisfied = c("Mostly satisfied", "Completely satisfied")
+                              ),
+    ethnicity = fct_collapse(j_ethn_dv, 
+                             "white background" = c("british/english/scottish/welsh/northern irish", "irish", "gypsy or irish traveller", "any other white background"),
+                             "mixed background" = c("white and black caribbean", "white and black african", "white and asian", "any other mixed background"),
+                             "asian" = c("indian", "pakistani", "bangladeshi", "chinese", "any other asian background"),
+                             "black background" = c("caribbean", "african", "any other black background"),
+                             "arab" = "arab",
+                             "other ethnic group" = c("any other ethnic group", "56")
+                             ),
+    maritalstatus = fct_collapse(j_marstat_dv,
+                                 "In partnership" = c("Married/Civil partner", "Living as couple"),
+                                 "Separated / Divorced" = c("Separated (incl. from civil partner)", "Divorced/dissolved civil partner")),
+    jobstatus = fct_collapse(j_jbstat, 
+                             "Employment" = c("Self employed", "Paid employment(ft/pt)"),
+                             "Unemployed" = "Unemployed",
+                             "Retired" = "Retired",
+                             "Others" = c("On maternity leave", "Family care or home", "Full-time student", "LT sick or disabled", "Govt training scheme", "Unpaid, family business", "On apprenticeship", "Doing something else")),
+    highest_qualification = fct_collapse(j_hiqual_dv, 
+                                         "Degree or higher" = c("Degree", "Other higher degree"))
+    )
+
+df_cleaned2 <- df_cleaned[df_cleaned$income >= 0,] #removing income that are negative, only 14 values of negative income as interested on positive income
+df_cleaned3 <- subset(df_cleaned2, select=-c(j_ethn_dv, j_marstat_dv, j_sclfsat2, j_jbstat, j_hiqual_dv, j_fimninvnet_dv, j_fimnlabnet_dv, j_fimnmisc_dv, j_fimnpen_dv, j_fimnsben_dv, j_fimnprben_dv) ) #putting it the final variables of analysis
+
+#choosing observations that are from England
+#summary(df_cleaned3$j_country)
+df_cleaned3 <- filter(df_cleaned3, j_country == "England")
+#View(df_cleaned3)
+
+#spliting our test and sample dataset
+bound <- floor((nrow(df_cleaned3)/4)*3)
+set.seed(123)
+df_cleaned3 <- df_cleaned3[sample(nrow(df_cleaned3)), ]
+
+df_train <- df_cleaned3[1:bound, ]
+df_test <- df_cleaned3[(bound +1):nrow(df_cleaned3), ]
+
+#summary(df_cleaned$j_scsf1)
+```
+
+```{r echo =FALSE}
+#Descriptive Statistic
+
+#plotting the amount subjective well-being variable
+ggplot(data = df_cleaned3) +
+  geom_histogram(mapping = aes(x =j_scghq1_dv), binwidth = 0.5) +
+  labs(x="subjective well-being scale", y = "count")
+
+
+#summary(df_cleaned3$j_scghq1_dv)
+cat_scgh <- as_factor(df_cleaned3$j_scghq1_dv)
+#summary(cat_scgh)
+
+```
+
+
+
+
+
+
+## Results
+From the OLS (Ordinary Least Squares) model, respondent’s financial situation is highly significant. Respondent that are finding it very difficult to get by will be 5.074 more distressed compared to living comfortably. However, the model shows that estimates for doing alright seems to be insignificant. From the OLS model, health level is significant for all level, showing that respondent with bad health are more distressed by 9.071 compared being excellent health.  Ethnicity, report a high significant estimate with Asian of –6.953 less distressed, and black background with –1.652. Female is highly significant with 1.028 more distressed compared to male and as age increases respondent are 4.011 less distressed. 
+
+With the lasso model using cross- validations choosing lambda that minimize mean squared error, the model was able to estimate 100 relevant variables out of 250 variables. In the plot choosing estimates with a 0.5 or higher for the covariates that causes distress and choosing top 4 covariates estimates that causes less distress. With the lasso model, health is important to subjective well-being for lasso predicted individuals having poor health are 8.573 more distressed, and if respondent that are in a financial situation that are very difficult with a a-level and unemployed has distressed for 5.050 and if respondent has a fair health level will distressed for 4.727. If respondent is finding very difficult this leads to 4.179 more distressed and finding quite difficult has a increased distressed level of 3.581.  Having a black background is 1.440 less distresses, with no qualifications –0.640, with asian –0.564 and other ethnic group –0.533, other qualifications –0.358. Therefore, it might be unfavorable to be unemployed and having a A-level qualification and being a very difficult situation. 
+
+Adaptive lasso where able to select 16 relevant variables out of 250 variables, thus compared to lasso adaptive lasso was able to be a more parsimony model. Plotting effects larger then 0.5. Similarly, to Ols and Lasso, respondent with poor health is top variables that leads to distress, about 7.456 more distressed. Individual are finding very difficult leads to 5.200 more distressed or quite difficult leads to 3.446 more distressed. Even having a fair health will leads to 3.983 distressed. Having a black background shows a 1.040 less distressed. However, if respondent is doing alright with GCSE and unemployed this will lead to 1.001 less distressed or being unemployed and finding it quite difficult causes 0.703 less distressed, this might be the case that individuals that are unemployed are dull to the effects of unemployment on well-being. 
+
+With the case of lasso and adaptive lasso the model consistency finds the same variables for the strongest effects on subjective well-being which are individuals with poor health and finding it very difficult or quite difficult to get by. In terms of building a parsimony model adaptive lasso able to select 16 variables much better than lasso, as with the case of lasso estimates most of the value are closed to zero thus adaptive lasso was able to ignore those covariates and select relevant variables. 
+
+```{r include=FALSE}
+
+#ols regressions
+set.seed(123)
+fit_ols <- lm(j_scghq1_dv ~ j_finnow*income*highest_qualification*jobstatus + j_scsf1 + ethnicity + maritalstatus +  j_single_dv*j_hhtype_dv + ethnicity + j_smoker + j_sex + j_dvage , data = df_train)
+#summary(fit_ols)
+
+#lasso regressions
+set.seed(123)
+fit_lasso_cv <- cv.glmnet(model.matrix(fit_ols), df_train$j_scghq1_dv)
+
+#extracting the estimate
+coef_la <- coef(fit_lasso_cv, s= "lambda.min")
+coef_la[which(coef_la != 0)]
+coef_la@Dimnames[[1]][which(coef_la != 0)]
+
+#storing the results
+results <-tibble(covariates = coef_la@Dimnames[[1]][which(coef_la != 0)], estimates =coef_la[which(coef_la != 0)])
+results <- results[order(results$estimates),] #sorting our result
+results1 <- results[c(1:5,93:100),]
+
+#adaptive regressions
+omega <- abs(coef(fit_lasso_cv))
+omega <- 1/omega
+omega[omega==Inf] <- 99999
+set.seed(123)
+fit_adaplasso_cv <- cv.glmnet(model.matrix(fit_ols), df_train$j_scghq1_dv, penalty.factor=omega)
+
+#extracting the estimate
+coef_ad <- coef(fit_adaplasso_cv, s="lambda.min")
+coef_ad[which(coef_ad != 0)]
+coef_ad@Dimnames[[1]][which(coef_ad != 0)]
+
+#storing the results
+results_ad <- tibble(covariates = coef_ad@Dimnames[[1]][which(coef_ad != 0)], estimates = coef_ad[which(coef_ad != 0)])
+results_ad <- results_ad[order(results_ad$estimates),] #sorting our result
+results2 <- results_ad[c(1:4,13:16),]
+
+
+```
+
+```{r echo =FALSE}
+#Presenting the results
+
+#change covariate names
+results1[1:13,1] <- c("black background", "No qualification", "asian", "other ethic group", "other qualifications", "single in household coupling with child", "finding very difficult & Other jobs", "Good Health", "Finding it quite difficult", "Finding it very difficult", "Fair health", "Finding very difficult& A-level& Unemployed", "Poor Health")
+
+results2[1:8,1] <- c("black background", "doing alright& GCSE& Unemployed", "Finding it quite difficult& Unemployed", "Retired", "Fair", "Finding it quite difficult", "Finding it very difficult", "Poor Health")
+
+p1 <- results1 %>% 
+  mutate(side=ifelse(estimates>0, "more distressed","less distressed")
+         ) %>% 
+  ggplot(aes(covariates, estimates, fill=side)) + geom_col() + coord_flip() + 
+  labs(x="estimates", y = "lasso") + 
+  theme_bw()
+
+p2 <- results2 %>% 
+  mutate(side=ifelse(estimates>0, "more distressed","less distressed")
+         ) %>% 
+  ggplot(aes(covariates, estimates, fill=side)) + geom_col() + coord_flip() + 
+  labs(x="estimates", y = "adp lasso") + 
+  theme_bw()
+
+plot_grid(p1, p2, lables = c("lasso", "ad_lasso"), nrow = 2, ncol = 1)
+
+```
+
+
+
+## Model Evaluation 
+Using our test sample to evaluate the model. Evidently lasso has the lowest mean squared error, however the adaptive lasso has the highest mean squared error among the three model. In the case of mean absolute error similarly to mean squared error lasso has the lowest value followed by the Ols model and adaptive lasso. Therefore, in the case of mean squared error and mean absolute error lasso is a slightly better model.  
+```{r echo =FALSE}
+defaultW <- getOption("warn")
+options(warn = -1)
+
+#model evaluations
+ols_pred <- predict(fit_ols, df_test)
+mse <- sum((df_test$j_scghq1_dv - ols_pred)^2/nrow(df_test))
+mae <- sum((abs(ols_pred - df_test$j_scghq1_dv)/nrow(df_test)))
+
+
+Dummy <- lm(j_scghq1_dv ~ j_finnow*income*highest_qualification*jobstatus + j_scsf1 + ethnicity + maritalstatus +  j_single_dv*j_hhtype_dv + ethnicity + j_smoker + j_sex + j_dvage , data = df_test)
+lasso_pred <- predict(fit_lasso_cv, model.matrix(Dummy), s = "lambda.min")
+mse_lasso <- sum((df_test$j_scghq1_dv - lasso_pred)^2/nrow(df_test))
+mae_lasso <- sum(abs(lasso_pred - df_test$j_scghq1_dv)/nrow(df_test))
+
+
+adplasso_pred <- predict(fit_adaplasso_cv, model.matrix(Dummy), s = "lambda.min")
+mse_adplasso <- sum((df_test$j_scghq1_dv - adplasso_pred)^2/nrow(df_test))
+mae_adplasso <- sum(abs(adplasso_pred - df_test$j_scghq1_dv)/nrow(df_test))
+
+model <- c("ols", "lasso", "adapative lasso")
+mean_squared_error <- c(mse, mse_lasso, mse_adplasso)
+mean_absolute_error<-c(mae, mae_lasso, mae_adplasso)
+
+table_1 <- data.frame(model, mean_squared_error, mean_absolute_error )
+table_1
+options(warn = 0)
+
+```
+
+## Conclusions
+In conclusions, based on the three model, individual’s health levels and financial situations have consistently found highly significant or having strong effect indicating government need to put in resources to focus on individual's health and financial situations in order to protect the country's well-being.
+
+## Appendix
+To view result for the regressions results, please un-comment the code below.
+```{r echo =FALSE}
+
+#summary(fit_ols)
+#View(results)
+#View(results_ad)
+
+```
+# Reference
+1. Argyle, M. . (2001).  The psychology of happiness.Routledge., (2nd ed.) 
+
+2. Frey, B. S. and Stutzer, A. (2002).  Happiness and economics:  How the economy and insti-tutions affect human well-being. 
+
+3. Clark,  A. E. and Oswald,  A. J. (1994).  Unhappiness and Unemployment.The Economic Journal, 104(424):648–659. 
+
+4. De Neve J-E, Ward G (2017) Happiness at work, Chapter 6, Helliwell et al (2017) 
+
+5. Gudmundsdottir, D. G. (2013). The impact of economic crisis on happiness.Social IndicatorsResearch, 110(3):1083–1101.
+
